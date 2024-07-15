@@ -2,14 +2,26 @@ import React, { useContext, useEffect, useState } from "react";
 import Layout from "../components/Layout";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { UserContext } from "../services/userContext";
-import { BiChat, BiChevronRight, BiShare } from "react-icons/bi";
+import {
+  BiChat,
+  BiChevronRight,
+  BiLink,
+  BiShare,
+  BiTrash,
+} from "react-icons/bi";
 import { BsArrowLeft, BsQuestionCircleFill } from "react-icons/bs";
 
 function QuizPage() {
   const navigate = useNavigate();
   const { quiz } = useParams();
-  const { user, fetchTopicDetails, questions, resources, setResources } =
-    useContext(UserContext);
+  const {
+    user,
+    fetchTopicDetails,
+    topicDetails,
+    addResource,
+    deleteResource,
+    setResources,
+  } = useContext(UserContext);
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userAnswers, setUserAnswers] = useState({});
@@ -19,15 +31,19 @@ function QuizPage() {
   const [resourceTitle, setResourceTitle] = useState("");
   const [resourceUrl, setResourceUrl] = useState("");
 
+  const [resourceAdded, setResourceAdded] = useState(false);
+  const [resourceDeleted, setResourceDeleted] = useState(false);
+
   useEffect(() => {
     if (quiz) {
       fetchTopicDetails(quiz);
+      setResourceAdded(false);
     }
-  }, [quiz]);
+  }, [quiz, resourceAdded, resourceDeleted]);
 
   const handleNextQuestion = () => {
-    if (questions && userAnswers[currentQuestionIndex]) {
-      if (currentQuestionIndex < questions.length - 1) {
+    if (topicDetails?.questions && userAnswers[currentQuestionIndex]) {
+      if (currentQuestionIndex < topicDetails?.questions.length - 1) {
         setCurrentQuestionIndex(currentQuestionIndex + 1);
       } else {
         calculateScore();
@@ -45,7 +61,7 @@ function QuizPage() {
 
   const calculateScore = () => {
     let newScore = 0;
-    questions.forEach((question, index) => {
+    topicDetails?.questions.forEach((question, index) => {
       if (userAnswers[index]?.toLowerCase() === question.answer.toLowerCase()) {
         newScore += 1;
       }
@@ -53,23 +69,51 @@ function QuizPage() {
     setScore(newScore);
   };
 
-  const progressPercentage = questions?.length
-    ? Math.round(((currentQuestionIndex + 1) / questions.length) * 100)
-    : 0;
+  const progressPercentage = showResults
+    ? Math.round(
+        ((currentQuestionIndex + 1) / topicDetails?.questions.length) * 100
+      )
+    : Math.round((currentQuestionIndex / topicDetails?.questions.length) * 100);
 
-  const handleAddResource = () => {
+  const handleAddResource = async () => {
     if (resourceTitle && resourceUrl) {
-      // Here, you might want to save the new resource to the backend as well.
-      // For now, we'll just add it to the local state.
-      const newResource = { title: resourceTitle, url: resourceUrl };
-      setResources([...resources, newResource]);
-      setResourceTitle("");
-      setResourceUrl("");
+      const newResource = {
+        title: resourceTitle,
+        url: resourceUrl,
+        topic_id: topicDetails?.id,
+      };
+      try {
+        await addResource(newResource);
+
+        setResourceAdded(!resourceAdded);
+
+        setResourceTitle("");
+        setResourceUrl("");
+        return true;
+      } catch (error) {
+        console.log(error);
+        return false;
+      }
+    }
+  };
+
+  const handleDeleteResource = async (id) => {
+    try {
+      await deleteResource(id);
+      setResourceDeleted(!resourceDeleted);
+      return true;
+    } catch (error) {
+      console.log(error);
+      return false;
     }
   };
 
   if (!user?.access_token) {
     navigate("/login");
+  }
+
+  if (!topicDetails) {
+    return <p>Loading...</p>;
   }
 
   return (
@@ -80,9 +124,8 @@ function QuizPage() {
             <span className="capitalize">{quiz}</span> Assessment
           </h2>
           <span className="h-[3px] w-32 bg-cyan-700 flex rounded-full my-5"></span>
-          <p className="max-w-lg font-semibold">
-            <span className="capitalize"> {quiz}</span> is a very important
-            topic. Here are some questions to test your knowledge.
+          <p className="max-w-3xl font-semibold text-ellipsis line-clamp-4">
+            {topicDetails?.description}
           </p>
           <div className="mt-10 mb-4 flex w-full items-center justify-between">
             <div className="controlls w-fit flex space-x-4">
@@ -103,19 +146,20 @@ function QuizPage() {
           <div className="status w-full flex justify-between items-center border border-slate-500 rounded-xl p-1">
             <div className="w-fit">
               <span className="font-semibold text-xs px-3 py-1.5 bg-yellow-100 rounded-lg">
-                {currentQuestionIndex === 0 ? 0 : progressPercentage}% Done
+                {progressPercentage} % Done
               </span>
               <span className="font-semibold text-xs px-3 py-1.5 rounded-lg">
-                {currentQuestionIndex + 1} Completed
+                {showResults ? currentQuestionIndex + 1 : currentQuestionIndex}{" "}
+                Completed
               </span>
               <span className="font-semibold text-xs px-3 py-1.5 rounded-lg">
-                {questions ? 0 : currentQuestionIndex + 1} in Progress
+                {currentQuestionIndex + 1} in Progress
               </span>
               <span className="font-semibold text-xs px-3 py-1.5 rounded-lg">
                 0 Skipped
               </span>
               <span className="font-semibold text-xs px-3 py-1.5 rounded-lg">
-                {questions?.length} Total
+                {topicDetails?.questions?.length} Total
               </span>
             </div>
             <div className="track w-fit">
@@ -128,9 +172,9 @@ function QuizPage() {
             <div className="w-full h-fit flex flex-col items-start space-y-2 border border-slate-500 rounded-xl p-3 mt-8">
               <h3 className="w-full font-bold text-xl">Results</h3>
               <p className="w-full font-semibold">
-                You scored {score} out of {questions.length}
+                You scored {score} out of {topicDetails?.questions.length}
               </p>
-              {questions.map((question, index) => (
+              {topicDetails?.questions.map((question, index) => (
                 <div
                   key={index}
                   className="question-box w-full divide-y-2 divide-slate-500 mb-4"
@@ -159,27 +203,28 @@ function QuizPage() {
             </div>
           ) : (
             <div className="w-full h-fit flex flex-col items-start space-y-2 border border-slate-500 rounded-xl p-3 mt-8">
-              {questions && questions.length > 0 && (
-                <div className="question-box w-full divide-y-2 divide-slate-500 mb-4">
-                  <div className="w-full bg-red-300">
-                    <h3 className="w-full font-bold text-xl">
-                      {questions[currentQuestionIndex].question}
-                    </h3>
+              {topicDetails?.questions &&
+                topicDetails?.questions.length > 0 && (
+                  <div className="question-box w-full divide-y-2 divide-slate-500 mb-4">
+                    <div className="w-full bg-red-300">
+                      <h3 className="w-full font-bold text-xl">
+                        {topicDetails?.questions[currentQuestionIndex].question}
+                      </h3>
+                    </div>
+                    <div className="options w-full pt-5">
+                      <textarea
+                        rows={"3"}
+                        type="text"
+                        name="answer"
+                        id="answer"
+                        placeholder="Type your answer here"
+                        className="w-full p-3 rounded-lg border border-slate-500"
+                        value={userAnswers[currentQuestionIndex] || ""}
+                        onChange={handleAnswerChange}
+                      />
+                    </div>
                   </div>
-                  <div className="options w-full pt-5">
-                    <textarea
-                      rows={"3"}
-                      type="text"
-                      name="answer"
-                      id="answer"
-                      placeholder="Type your answer here"
-                      className="w-full p-3 rounded-lg border border-slate-500"
-                      value={userAnswers[currentQuestionIndex] || ""}
-                      onChange={handleAnswerChange}
-                    />
-                  </div>
-                </div>
-              )}
+                )}
               <div className="w-fit">
                 <button
                   onClick={handleNextQuestion}
@@ -217,24 +262,41 @@ function QuizPage() {
                 Add Resource
               </button>
             </div>
-            <div className="resource-list">
-              {resources.map((resource, index) => (
-                <div key={index} className="resource-item mb-2">
-                  <a
-                    href={resource.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-cyan-700 underline"
+            <div className="resource-list h-full w-full overflow-y-scroll pl-2">
+              {topicDetails?.resources.length > 0 ? (
+                topicDetails?.resources.map((resource, index) => (
+                  <div
+                    key={index}
+                    className="resource-item group hover:border-b border-slate-700 mb-2 flex items-center justify-between"
                   >
-                    {resource.title}
-                  </a>
+                    <Link
+                      to={resource.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-slate-950 font-semibold flex items-center space-x-2 group-hover:text-cyan-600"
+                    >
+                      <span>{index + 1}. </span>
+                      <span>{resource.title}</span> <BiLink />
+                    </Link>
+                    <span>
+                      <BiTrash
+                        onClick={() => handleDeleteResource(resource.id)}
+                        className="hover:text-red-500 cursor-pointer"
+                      />
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="h-fit text-center mt-16 font-bold w-full">
+                  No Resource Found
                 </div>
-              ))}
+              )}
             </div>
           </div>
           <div className="px-4 py-6 rounded-xl bg-cyan-100 border border-slate-600">
             <h3 className="text-3xl font-bold">
-              Results: {score > 0 ? (score / questions.length) * 100 : 0}%
+              Results:{" "}
+              {score > 0 ? (score / topicDetails?.questions.length) * 100 : 0}%
             </h3>
           </div>
         </div>

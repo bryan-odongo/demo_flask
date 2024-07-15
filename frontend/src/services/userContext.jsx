@@ -7,6 +7,7 @@ export const UserProvider = ({ children }) => {
   const [topics, setTopics] = useState([]);
   const [resources, setResources] = useState([]);
   const [questions, setQuestions] = useState([]);
+  const [topicDetails, setTopicDetails] = useState(null);
 
   const registerUser = async (userData) => {
     try {
@@ -91,10 +92,23 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  const deleteResource = async (resourceId) => {
+    try {
+      await fetch(`http://127.0.0.1:5000/resources/${resourceId}`, {
+        method: "DELETE",
+      });
+
+      setResources(resources.filter((r) => r.id !== resourceId));
+    } catch (error) {
+      console.error("Error deleting resource:", error);
+    }
+  };
+
   const fetchTopicDetails = async (topicName) => {
     try {
       const response = await fetch(`http://127.0.0.1:5000/topics/${topicName}`);
       const result = await response.json();
+      setTopicDetails(result);
       setQuestions(result.questions || []);
       setResources(result.resources || []);
     } catch (error) {
@@ -179,7 +193,9 @@ export const UserProvider = ({ children }) => {
         fetchTopicDetails,
         fetchResourceDetails,
         addResource,
+        deleteResource,
         questions,
+        topicDetails,
       }}
     >
       {children}
